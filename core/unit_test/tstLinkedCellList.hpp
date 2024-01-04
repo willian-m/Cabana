@@ -96,7 +96,7 @@ struct LCLTestData
 };
 
 void copyListToHost( LCLTestData& test_data,
-                     const Cabana::LinkedCellList<TEST_MEMSPACE> cell_list )
+                     const Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list )
 {
     // Copy data to the host for testing.
     auto np = test_data.num_p;
@@ -137,7 +137,7 @@ void copyListToHost( LCLTestData& test_data,
 }
 
 void checkBins( const LCLTestData test_data,
-                const Cabana::LinkedCellList<TEST_MEMSPACE> cell_list )
+                const Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list )
 {
     auto nx = test_data.nx;
 
@@ -250,7 +250,7 @@ void testLinkedList()
     {
         auto begin = test_data.begin;
         auto end = test_data.end;
-        Cabana::LinkedCellList<TEST_MEMSPACE> cell_list(
+        Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list(
             pos, begin, end, grid_delta, grid_min, grid_max );
         Cabana::permute( cell_list, test_data.aosoa );
 
@@ -262,7 +262,7 @@ void testLinkedList()
 
     // Now bin and permute all of the particles.
     {
-        Cabana::LinkedCellList<TEST_MEMSPACE> cell_list( pos, grid_delta,
+        Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list( pos, grid_delta,
                                                          grid_min, grid_max );
         Cabana::permute( cell_list, test_data.aosoa );
 
@@ -287,7 +287,7 @@ void testLinkedListSlice()
     {
         auto begin = test_data.begin;
         auto end = test_data.end;
-        Cabana::LinkedCellList<TEST_MEMSPACE> cell_list(
+        Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list(
             pos, begin, end, grid_delta, grid_min, grid_max );
         Cabana::permute( cell_list, pos );
 
@@ -298,7 +298,7 @@ void testLinkedListSlice()
     }
     // Now bin and permute all of the particles.
     {
-        Cabana::LinkedCellList<TEST_MEMSPACE> cell_list( pos, grid_delta,
+        Cabana::LinkedCellList<TEST_MEMSPACE,3> cell_list( pos, grid_delta,
                                                          grid_min, grid_max );
         Cabana::permute( cell_list, pos );
 

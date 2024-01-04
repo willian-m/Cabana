@@ -33,7 +33,7 @@ namespace Cabana
   \brief Data describing the bin sizes and offsets resulting from a binning
   operation on a 3d regular Cartesian grid.
 */
-template <class MemorySpace>
+template <class MemorySpace, int NumDim>
 class LinkedCellList
 {
   public:
@@ -78,14 +78,12 @@ class LinkedCellList
     */
     template <class SliceType>
     LinkedCellList(
-        SliceType positions, const typename SliceType::value_type grid_delta[3],
-        const typename SliceType::value_type grid_min[3],
-        const typename SliceType::value_type grid_max[3],
+        SliceType positions, const typename SliceType::value_type grid_delta[NumDim],
+        const typename SliceType::value_type grid_min[NumDim],
+        const typename SliceType::value_type grid_max[NumDim],
         typename std::enable_if<( is_slice<SliceType>::value ), int>::type* =
             0 )
-        : _grid( grid_min[0], grid_min[1], grid_min[2], grid_max[0],
-                 grid_max[1], grid_max[2], grid_delta[0], grid_delta[1],
-                 grid_delta[2] )
+        : _grid( grid_min, grid_max, grid_delta )
     {
         std::size_t np = positions.size();
         allocate( totalBins(), np );
@@ -112,14 +110,12 @@ class LinkedCellList
     template <class SliceType>
     LinkedCellList(
         SliceType positions, const std::size_t begin, const std::size_t end,
-        const typename SliceType::value_type grid_delta[3],
-        const typename SliceType::value_type grid_min[3],
-        const typename SliceType::value_type grid_max[3],
+        const typename SliceType::value_type grid_delta[NumDim],
+        const typename SliceType::value_type grid_min[NumDim],
+        const typename SliceType::value_type grid_max[NumDim],
         typename std::enable_if<( is_slice<SliceType>::value ), int>::type* =
             0 )
-        : _grid( grid_min[0], grid_min[1], grid_min[2], grid_max[0],
-                 grid_max[1], grid_max[2], grid_delta[0], grid_delta[1],
-                 grid_delta[2] )
+        : _grid( grid_min, grid_max, grid_delta )
     {
         allocate( totalBins(), end - begin );
         build( positions, begin, end );
@@ -151,9 +147,9 @@ class LinkedCellList
       the slowest and the k index mvoes the fastest.
     */
     KOKKOS_INLINE_FUNCTION
-    size_type cardinalBinIndex( const int i, const int j, const int k ) const
+    size_type cardinalBinIndex( const int i[NumDim] ) const
     {
-        return _grid.cardinalCellIndex( i, j, k );
+        return _grid.cardinalCellIndex( i );
     }
 
     /*!
@@ -167,9 +163,9 @@ class LinkedCellList
       the slowest and the k index mvoes the fastest.
     */
     KOKKOS_INLINE_FUNCTION
-    void ijkBinIndex( const int cardinal, int& i, int& j, int& k ) const
+    void ijkBinIndex( const int cardinal, int (&i)[NumDim] ) const
     {
-        _grid.ijkBinIndex( cardinal, i, j, k );
+        _grid.ijkBinIndex( cardinal, i );
     }
 
     /*!
@@ -180,9 +176,9 @@ class LinkedCellList
       \return The number of particles in the bin.
     */
     KOKKOS_INLINE_FUNCTION
-    int binSize( const int i, const int j, const int k ) const
+    int binSize( const int i[NumDim] ) const
     {
-        return _bin_data.binSize( cardinalBinIndex( i, j, k ) );
+        return _bin_data.binSize( cardinalBinIndex( i ) );
     }
 
     /*!
@@ -193,9 +189,9 @@ class LinkedCellList
       \return The starting particle index of the bin.
     */
     KOKKOS_INLINE_FUNCTION
-    size_type binOffset( const int i, const int j, const int k ) const
+    size_type binOffset( const int i[NumDim] ) const
     {
-        return _bin_data.binOffset( cardinalBinIndex( i, j, k ) );
+        return _bin_data.binOffset( cardinalBinIndex( i ) );
     }
 
     /*!
@@ -274,11 +270,13 @@ class LinkedCellList
         auto counts_sv = Kokkos::Experimental::create_scatter_view( _counts );
         auto cell_count = KOKKOS_LAMBDA( const std::size_t p )
         {
-            int i, j, k;
-            grid.locatePoint( positions( p, 0 ), positions( p, 1 ),
-                              positions( p, 2 ), i, j, k );
+            typename SliceType::value_type pos[NumDim];
+            int i[NumDim];
+            for ( int dim = 0; dim < NumDim; ++dim )
+                pos[dim] = positions( p, dim );
+            grid.locatePoint( pos, i );
             auto counts_data = counts_sv.access();
-            counts_data( grid.cardinalCellIndex( i, j, k ) ) += 1;
+            counts_data( grid.cardinalCellIndex( i ) ) += 1;
         };
         Kokkos::parallel_for( "Cabana::LinkedCellList::build::cell_count",
                               particle_range, cell_count );
@@ -304,10 +302,12 @@ class LinkedCellList
         // Compute the permutation vector.
         auto create_permute = KOKKOS_LAMBDA( const std::size_t p )
         {
-            int i, j, k;
-            grid.locatePoint( positions( p, 0 ), positions( p, 1 ),
-                              positions( p, 2 ), i, j, k );
-            auto cell_id = grid.cardinalCellIndex( i, j, k );
+            typename SliceType::value_type pos[NumDim];
+            int i[NumDim];
+            for ( int dim = 0; dim < NumDim; ++dim )
+                pos[dim] = positions( p, dim );
+            grid.locatePoint( pos, i );
+            auto cell_id = grid.cardinalCellIndex( i );
             int c = Kokkos::atomic_fetch_add( &counts( cell_id ), 1 );
             permutes( offsets( cell_id ) + c ) = p;
         };
@@ -354,7 +354,7 @@ class LinkedCellList
 
   private:
     BinningData<MemorySpace> _bin_data;
-    Impl::CartesianGrid<double> _grid;
+    Impl::CartesianGrid<double, NumDim> _grid;
 
     CountView _counts;
     OffsetView _offsets;
@@ -372,6 +372,42 @@ class LinkedCellList
             Kokkos::view_alloc( Kokkos::WithoutInitializing, "permutes" ),
             nparticles );
     }
+    /// ------------------------------------------------------------------------
+    // Implement 3D functions only (for backward compatibility).
+    /// ------------------------------------------------------------------------
+    public:
+    KOKKOS_INLINE_FUNCTION
+    size_type cardinalBinIndex( const int i, const int j, const int k ) const
+    {
+        assertm( NumDim == 3, "Deprecated function only works for 3D" );
+        int ijk[3] = {i, j, k};
+        return cardinalBinIndex( ijk );
+    }
+    KOKKOS_INLINE_FUNCTION
+    void ijkBinIndex( const int cardinal, int& i, int& j, int& k ) const
+    {
+        assertm( NumDim == 3, "Deprecated function only works for 3D" );
+        int ijk[3];
+        ijkBinIndex( cardinal, ijk );
+        i = ijk[0];
+        j = ijk[1];
+        k = ijk[2];
+    }
+    KOKKOS_INLINE_FUNCTION
+    int binSize( const int i, const int j, const int k ) const
+    {
+        assertm( NumDim == 3, "Deprecated function only works for 3D" );
+        int ijk[3] = {i, j, k};
+        return binSize( ijk );
+    }
+    KOKKOS_INLINE_FUNCTION
+    size_type binOffset( const int i, const int j, const int k ) const
+    {
+        assertm( NumDim == 3, "Deprecated function only works for 3D" );
+        int ijk[3] = {i, j, k};
+        return binOffset( ijk );
+    }
+
 };
 
 //---------------------------------------------------------------------------//
@@ -381,8 +417,8 @@ struct is_linked_cell_list_impl : public std::false_type
 {
 };
 
-template <typename MemorySpace>
-struct is_linked_cell_list_impl<LinkedCellList<MemorySpace>>
+template <typename MemorySpace, int NumDim>
+struct is_linked_cell_list_impl<LinkedCellList<MemorySpace, NumDim>>
     : public std::true_type
 {
 };

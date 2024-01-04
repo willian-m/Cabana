@@ -113,13 +113,13 @@ void testVerletListFull()
     // Create the neighbor list.
     {
         Cabana::VerletList<TEST_MEMSPACE, Cabana::FullNeighborTag, LayoutTag,
-                           BuildTag>
+                           BuildTag, 3>
             nlist_full( position, 0, position.size(), test_data.test_radius,
                         test_data.cell_size_ratio, test_data.grid_min,
                         test_data.grid_max );
         // Test default construction.
         Cabana::VerletList<TEST_MEMSPACE, Cabana::FullNeighborTag, LayoutTag,
-                           BuildTag>
+                           BuildTag, 3>
             nlist;
 
         nlist = nlist_full;
